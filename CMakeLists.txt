@@ -1,41 +1,72 @@
-cmake_minimum_required(VERSION 3.16)
-project(DataReel LANGUAGES C VERSION 0.1.0)
+cmake_minimum_required(VERSION 3.15)
+project(DataReel VERSION 1.0.0 LANGUAGES C)
 
-# --- Language standard ---
-set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# --- Warnings ---
-if(MSVC)
-    add_compile_options(/W4)
-else()
-    add_compile_options(-Wall -Wextra)
-endif()
-
-# --- SDL2 & SDL2_ttf (Ubuntu-friendly using pkg-config) ---
+# Find required packages
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
-pkg_check_modules(SDL2_TTF REQUIRED IMPORTED_TARGET SDL2_ttf)
+pkg_check_modules(GTK4 REQUIRED gtk4)
 
-# --- UI submodule ---
-add_subdirectory(src/ui)
+# GLib compile resources
+find_program(GLIB_COMPILE_RESOURCES NAMES glib-compile-resources REQUIRED)
 
-# --- Main executable ---
-add_executable(DataReel src/app/main.c)
+# Generate resource C file
+set(GRESOURCE_XML ${CMAKE_SOURCE_DIR}/resources/app.gresource.xml)
+set(GRESOURCE_C ${CMAKE_BINARY_DIR}/resources.c)
 
-# Link to SDL and your UI library
-target_link_libraries(DataReel
-    PRIVATE
-        PkgConfig::SDL2
-        PkgConfig::SDL2_TTF
-        DataReelUI
+add_custom_command(
+    OUTPUT ${GRESOURCE_C}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/resources
+    COMMAND ${GLIB_COMPILE_RESOURCES}
+    ARGS
+        --target=${GRESOURCE_C}
+        --generate-source
+        ${GRESOURCE_XML}
+    DEPENDS ${GRESOURCE_XML}
 )
 
-# --- Post-build: copy resources (font) next to the binary ---
-add_custom_command(
-    TARGET DataReel POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:DataReel>/resources
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_SOURCE_DIR}/resources/Inter_28pt-Regular.ttf
-            $<TARGET_FILE_DIR:DataReel>/resources/Inter_28pt-Regular.ttf
+# Platform-specific settings
+if(APPLE)
+    set(CMAKE_MACOSX_RPATH 1)
+    set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
+endif()
+
+# Source files
+set(SOURCES
+    src/main.c
+    src/ui/main_window.c
+    src/ui/download_row.c
+    src/core/downloader.c
+    src/core/process_manager.c
+    src/utils/config.c
+)
+
+# Include directories
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${GTK4_INCLUDE_DIRS}
+)
+
+# Create executable
+add_executable(${PROJECT_NAME} ${SOURCES})
+
+# Link libraries
+target_link_libraries(${PROJECT_NAME}
+    ${GTK4_LIBRARIES}
+)
+
+target_link_directories(${PROJECT_NAME} PRIVATE
+    ${GTK4_LIBRARY_DIRS}
+)
+
+target_compile_options(${PROJECT_NAME} PRIVATE
+    ${GTK4_CFLAGS_OTHER}
+    -Wall -Wextra
+)
+
+# Install target
+install(TARGETS ${PROJECT_NAME}
+    RUNTIME DESTINATION bin
 )

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/example/youtube-dl-gtk">
+    <!-- UI definitions -->
+    <file compressed="true">ui/window.ui</file>
+    <file compressed="true">ui/preferences.ui</file>
+
+    <!-- CSS styling -->
+    <file compressed="true">style.css</file>
+
+    <!-- Icons -->
+    <file compressed="true">icons/download.svg</file>
+    <file compressed="true">icons/cancel.svg</file>
+    <file compressed="true">icons/completed.svg</file>
+  </gresource>
+</gresources>

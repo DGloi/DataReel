@@ -1,0 +1,32 @@
+.download-row {
+    padding: 12px;
+    border-bottom: 1px solid alpha(@borders, 0.5);
+}
+
+.download-row:hover {
+    background-color: alpha(@theme_fg_color, 0.05);
+}
+
+.status-downloading {
+    color: @accent_color;
+    font-weight: bold;
+}
+
+.status-completed {
+    color: @success_color;
+}
+
+.status-failed {
+    color: @error_color;
+}
+
+.progress-bar {
+    min-height: 6px;
+    border-radius: 3px;
+}
+
+/* Make URL entry more prominent */
+entry.url-entry {
+    font-size: 1.1em;
+    padding: 8px;
+}
