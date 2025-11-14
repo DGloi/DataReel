@@ -1,8 +1,9 @@
 #include "common.h"
 #include "ui/main_window.h"
+#include "downloaders/downloader_interface.h"
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
-    (void)user_data;  // Suppress unused warning
+    (void)user_data;
     GtkWidget *window = main_window_new(app);
     gtk_window_present(GTK_WINDOW(window));
 }
@@ -10,6 +11,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 int main(int argc, char *argv[]) {
     GtkApplication *app;
     int status;
+
+    // Register all downloaders
+    downloader_register_all();
 
     app = gtk_application_new(APP_ID, G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), NULL);

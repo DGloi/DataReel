@@ -1,8 +1,9 @@
-#include "downloader.h"
+#include "youtube_downloader.h"
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
-DownloadItem *downloader_create_item(const char *url, const char *output_path) {
+static DownloadItem* youtube_create_item(const char *url, const char *output_path) {
     if (!url || strlen(url) == 0) {
         return NULL;
     }
@@ -13,21 +14,12 @@ DownloadItem *downloader_create_item(const char *url, const char *output_path) {
     item->status = DOWNLOAD_STATUS_IDLE;
     item->progress = 0.0;
     item->process_id = -1;
+    item->type = DOWNLOADER_YOUTUBE;
 
     return item;
 }
 
-void downloader_free_item(DownloadItem *item) {
-    if (!item) return;
-
-    g_free(item->url);
-    g_free(item->output_path);
-    g_free(item->filename);
-    g_free(item->error_message);
-    g_free(item);
-}
-
-gboolean downloader_start(DownloadItem *item) {
+static gboolean youtube_start(DownloadItem *item) {
     if (!item || item->status == DOWNLOAD_STATUS_DOWNLOADING) {
         return FALSE;
     }
@@ -47,7 +39,7 @@ gboolean downloader_start(DownloadItem *item) {
         // Parent process
         item->process_id = pid;
         item->status = DOWNLOAD_STATUS_DOWNLOADING;
-        g_print("Download started with PID: %d\n", pid);
+        g_print("YouTube download started with PID: %d\n", pid);
         return TRUE;
     } else {
         // Fork failed
@@ -57,7 +49,7 @@ gboolean downloader_start(DownloadItem *item) {
     }
 }
 
-gboolean downloader_cancel(DownloadItem *item) {
+static gboolean youtube_cancel(DownloadItem *item) {
     if (!item || item->process_id <= 0) {
         return FALSE;
     }
@@ -70,7 +62,7 @@ gboolean downloader_cancel(DownloadItem *item) {
     return FALSE;
 }
 
-DownloadStatus downloader_get_status(DownloadItem *item) {
+static DownloadStatus youtube_get_status(DownloadItem *item) {
     if (!item) return DOWNLOAD_STATUS_IDLE;
 
     if (item->process_id > 0 && item->status == DOWNLOAD_STATUS_DOWNLOADING) {
@@ -78,10 +70,8 @@ DownloadStatus downloader_get_status(DownloadItem *item) {
         pid_t result = waitpid(item->process_id, &status, WNOHANG);
 
         if (result == 0) {
-            // Still running
             return DOWNLOAD_STATUS_DOWNLOADING;
         } else if (result == item->process_id) {
-            // Process finished
             if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
                 item->status = DOWNLOAD_STATUS_COMPLETED;
             } else {
@@ -91,4 +81,29 @@ DownloadStatus downloader_get_status(DownloadItem *item) {
     }
 
     return item->status;
+}
+
+static void youtube_free_item(DownloadItem *item) {
+    if (!item) return;
+
+    g_free(item->url);
+    g_free(item->output_path);
+    g_free(item->filename);
+    g_free(item->error_message);
+    g_free(item);
+}
+
+DownloaderInterface* youtube_downloader_get_interface(void) {
+    static DownloaderInterface interface = {
+        .name = "YouTube",
+        .icon_name = "video-display",
+        .type = DOWNLOADER_YOUTUBE,
+        .create_item = youtube_create_item,
+        .start = youtube_start,
+        .cancel = youtube_cancel,
+        .get_status = youtube_get_status,
+        .free_item = youtube_free_item
+    };
+
+    return &interface;
 }

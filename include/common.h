@@ -7,9 +7,17 @@
 #include <string.h>
 
 // Application constants
-#define APP_ID "com.example.youtube-dl-gtk"
-#define APP_NAME "Download Manager"
+#define APP_ID "com.datareel.app"
+#define APP_NAME "DataReel Desktop"
 #define APP_VERSION "1.0.0"
+
+// Downloader types
+typedef enum {
+    DOWNLOADER_YOUTUBE,
+    DOWNLOADER_INSTAGRAM,
+    DOWNLOADER_TWITTER,
+    DOWNLOADER_GENERIC
+} DownloaderType;
 
 // Download status enumeration
 typedef enum {
@@ -30,6 +38,7 @@ typedef struct {
     double progress;
     char *error_message;
     pid_t process_id;
+    DownloaderType type;
 } DownloadItem;
 
 #endif
