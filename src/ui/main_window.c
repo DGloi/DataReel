@@ -263,10 +263,17 @@ static gboolean fetch_metadata_timeout(gpointer user_data) {
 
 static void on_url_changed(GtkEditable *editable, gpointer user_data) {
     (void)editable;
+    MainWindowData *data = (MainWindowData *)user_data;
 
     if (url_timeout_id > 0) {
         g_source_remove(url_timeout_id);
     }
+
+    // Reset preview and options when URL changes
+    if (GTK_IS_WIDGET(data->preview_box)) {
+        gtk_widget_set_visible(data->preview_box, FALSE);
+    }
+    download_options_reset(data->options_panel);
 
     url_timeout_id = g_timeout_add(1000, fetch_metadata_timeout, user_data);
 }
@@ -274,8 +281,20 @@ static void on_url_changed(GtkEditable *editable, gpointer user_data) {
 static void on_metadata_fetched(VideoMetadata *meta, gpointer user_data) {
     MainWindowData *data = (MainWindowData *)user_data;
 
-    if (!meta) {
-        gtk_widget_set_visible(data->preview_box, FALSE);
+    if (!meta || !meta->title) {
+        if (GTK_IS_WIDGET(data->preview_box)) {
+            gtk_widget_set_visible(data->preview_box, FALSE);
+        }
+        if (meta) metadata_free(meta);
+        return;
+    }
+
+    // Ensure widgets are valid
+    if (!GTK_IS_WIDGET(data->preview_box) ||
+        !GTK_IS_WIDGET(data->preview_title) ||
+        !GTK_IS_WIDGET(data->preview_thumbnail) ||
+        !GTK_IS_WIDGET(data->preview_info)) {
+        metadata_free(meta);
         return;
     }
 
@@ -285,12 +304,23 @@ static void on_metadata_fetched(VideoMetadata *meta, gpointer user_data) {
     }
 
     if (meta->thumbnail_pixbuf) {
+        int width = gdk_pixbuf_get_width(meta->thumbnail_pixbuf);
+        int height = gdk_pixbuf_get_height(meta->thumbnail_pixbuf);
+
+        // Scale to fit 350 width while maintaining aspect ratio
+        int new_width = 350;
+        int new_height = (height * new_width) / width;
+
         GdkPixbuf *scaled = gdk_pixbuf_scale_simple(meta->thumbnail_pixbuf,
-                                                    350, 200, GDK_INTERP_BILINEAR);
+                                                    new_width, new_height,
+                                                    GDK_INTERP_BILINEAR);
         GdkTexture *texture = gdk_texture_new_for_pixbuf(scaled);
-        gtk_image_set_from_paintable(GTK_IMAGE(data->preview_thumbnail), GDK_PAINTABLE(texture));
+        gtk_image_set_from_paintable(GTK_IMAGE(data->preview_thumbnail),
+                                     GDK_PAINTABLE(texture));
         g_object_unref(scaled);
         g_object_unref(texture);
+    } else {
+        gtk_image_set_from_icon_name(GTK_IMAGE(data->preview_thumbnail), "video-x-generic");
     }
 
     // Build info text
@@ -309,12 +339,24 @@ static void on_metadata_fetched(VideoMetadata *meta, gpointer user_data) {
         g_free(size);
     }
 
+    // Show number of available formats
+    if (meta->formats) {
+        if (info->len > 0) g_string_append(info, " • ");
+        g_string_append_printf(info, "%d formats available", g_list_length(meta->formats));
+    }
+
     gtk_label_set_text(GTK_LABEL(data->preview_info), info->str);
     g_string_free(info, TRUE);
 
+    // Update download options with available qualities
+    download_options_update_from_metadata(data->options_panel, meta);
+
     // Store metadata for later use
-    g_object_set_data_full(G_OBJECT(data->preview_box), "metadata", meta,
-                          (GDestroyNotify)metadata_free);
+    VideoMetadata *old_meta = g_object_get_data(G_OBJECT(data->preview_box), "metadata");
+    if (old_meta) {
+        metadata_free(old_meta);
+    }
+    g_object_set_data(G_OBJECT(data->preview_box), "metadata", meta);
 
     gtk_widget_set_visible(data->preview_box, TRUE);
 }
