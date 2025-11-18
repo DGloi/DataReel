@@ -29,16 +29,20 @@ GtkWidget* download_options_panel_new(void) {
     DownloadOptionsWidgets *widgets = g_malloc0(sizeof(DownloadOptionsWidgets));
     int row = 0;
 
-    // Quality selector (initially shows placeholder)
+    // Quality selector
     GtkWidget *label = gtk_label_new("Quality:");
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 1);
 
     widgets->quality_combo = gtk_combo_box_text_new();
-    // Show placeholder until metadata is loaded
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "Enter URL to load options...");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "Best Quality");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "1080p");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "720p");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "480p");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "360p");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "Audio Only");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo), "Custom...");
     gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->quality_combo), 0);
-    gtk_widget_set_sensitive(widgets->quality_combo, FALSE);
     gtk_widget_set_hexpand(widgets->quality_combo, TRUE);
     gtk_grid_attach(GTK_GRID(grid), widgets->quality_combo, 1, row++, 1, 1);
 
@@ -107,49 +111,6 @@ GtkWidget* download_options_panel_new(void) {
     g_object_set_data_full(G_OBJECT(frame), "options-widgets", widgets, g_free);
 
     return frame;
-}
-
-void download_options_update_from_metadata(GtkWidget *panel, VideoMetadata *meta) {
-    if (!meta) return;
-
-    DownloadOptionsWidgets *widgets = g_object_get_data(G_OBJECT(panel), "options-widgets");
-    if (!widgets) return;
-
-    // Clear existing items
-    gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(widgets->quality_combo));
-
-    if (meta->available_qualities) {
-        // Add qualities from metadata
-        for (int i = 0; meta->available_qualities[i] != NULL; i++) {
-            gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo),
-                                           meta->available_qualities[i]);
-        }
-
-        // Select "Best Quality" by default
-        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->quality_combo), 0);
-        gtk_widget_set_sensitive(widgets->quality_combo, TRUE);
-
-        g_print("Updated quality options from metadata (%d options)\n",
-                g_strv_length(meta->available_qualities));
-    } else {
-        // No qualities available - show error message
-        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo),
-                                       "No formats available");
-        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->quality_combo), 0);
-        gtk_widget_set_sensitive(widgets->quality_combo, FALSE);
-    }
-}
-
-void download_options_reset(GtkWidget *panel) {
-    DownloadOptionsWidgets *widgets = g_object_get_data(G_OBJECT(panel), "options-widgets");
-    if (!widgets) return;
-
-    // Reset to placeholder state
-    gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(widgets->quality_combo));
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo),
-                                   "Enter URL to load options...");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->quality_combo), 0);
-    gtk_widget_set_sensitive(widgets->quality_combo, FALSE);
 }
 
 DownloadOptions* download_options_get(GtkWidget *panel) {

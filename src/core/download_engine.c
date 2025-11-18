@@ -86,49 +86,39 @@ gboolean download_item_start(DownloadItem *item) {
     int argc;
     char **args = ytdlp_build_args(item->url, item->output_path, item->options, &argc);
 
-    int pipefd[2];
-    if (pipe(pipefd) != 0) {
-        ytdlp_free_args(args);
-        return FALSE;
-    }
-
+    int stdout_fd;
     pid_t pid = fork();
 
     if (pid == 0) {
         // Child process
-        close(pipefd[0]); // Close read end
-
-        // Redirect stdout and stderr to pipe
-        dup2(pipefd[1], STDOUT_FILENO);
-        dup2(pipefd[1], STDERR_FILENO);
-        close(pipefd[1]);
-
         execvp(args[0], args);
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
         // Parent process
-        close(pipefd[1]); // Close write end
-
         item->process_id = pid;
         item->status = DOWNLOAD_STATUS_DOWNLOADING;
-        item->read_fd = pipefd[0];
 
-        // Make read end non-blocking
-        int flags = fcntl(item->read_fd, F_GETFL, 0);
-        fcntl(item->read_fd, F_SETFL, flags | O_NONBLOCK);
+        // Create pipe for reading stdout
+        int pipefd[2];
+        if (pipe(pipefd) == 0) {
+            item->read_fd = pipefd[0];
 
-        // Create GIOChannel for async reading
-        item->io_channel = g_io_channel_unix_new(item->read_fd);
-        g_io_channel_set_encoding(item->io_channel, NULL, NULL);
-        g_io_channel_set_buffered(item->io_channel, FALSE);
+            // Make read end non-blocking
+            int flags = fcntl(item->read_fd, F_GETFL, 0);
+            fcntl(item->read_fd, F_SETFL, flags | O_NONBLOCK);
 
-        item->io_watch_id = g_io_add_watch(item->io_channel,
-                                          G_IO_IN | G_IO_HUP | G_IO_ERR,
-                                          on_stdout_readable,
-                                          item);
+            // Create GIOChannel for async reading
+            item->io_channel = g_io_channel_unix_new(item->read_fd);
+            g_io_channel_set_encoding(item->io_channel, NULL, NULL);
+            g_io_channel_set_buffered(item->io_channel, FALSE);
+
+            item->io_watch_id = g_io_add_watch(item->io_channel,
+                                              G_IO_IN | G_IO_HUP,
+                                              on_stdout_readable,
+                                              item);
+        }
 
         ytdlp_free_args(args);
-        g_print("Download started with PID: %d\n", pid);
         return TRUE;
     }
 
