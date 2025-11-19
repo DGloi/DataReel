@@ -139,7 +139,10 @@ static gboolean update_progress(gpointer user_data) {
     DownloadItemWidgetData *data = (DownloadItemWidgetData *)user_data;
     DownloadItem *item = data->item;
 
-    if (!item) return FALSE;
+    if (!item) {
+        data->update_timer = 0;
+        return FALSE;
+    }
 
     // Update progress bar
     gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(data->progress_bar),
@@ -151,6 +154,8 @@ static gboolean update_progress(gpointer user_data) {
 
     // Update status
     const char *status_text = NULL;
+    const char *status_class = NULL;
+
     switch (item->status) {
         case DOWNLOAD_STATUS_IDLE:
             status_text = "Idle";
@@ -163,21 +168,31 @@ static gboolean update_progress(gpointer user_data) {
             break;
         case DOWNLOAD_STATUS_DOWNLOADING:
             status_text = "Downloading";
+            status_class = "accent";
             break;
         case DOWNLOAD_STATUS_PROCESSING:
             status_text = "Processing...";
             break;
         case DOWNLOAD_STATUS_COMPLETED:
             status_text = "✓ Completed";
+            status_class = "success";
             gtk_widget_set_sensitive(data->cancel_button, FALSE);
+            gtk_widget_set_visible(data->cancel_button, FALSE);
             break;
         case DOWNLOAD_STATUS_FAILED:
             status_text = "✗ Failed";
+            status_class = "error";
             gtk_widget_set_sensitive(data->cancel_button, FALSE);
+            gtk_widget_set_visible(data->cancel_button, FALSE);
+            if (item->error_message) {
+                gtk_widget_set_tooltip_text(data->status_label, item->error_message);
+            }
             break;
         case DOWNLOAD_STATUS_CANCELLED:
             status_text = "Cancelled";
+            status_class = "warning";
             gtk_widget_set_sensitive(data->cancel_button, FALSE);
+            gtk_widget_set_visible(data->cancel_button, FALSE);
             break;
     }
 
@@ -199,6 +214,8 @@ static gboolean update_progress(gpointer user_data) {
 
             g_free(speed_str);
             g_free(speed_text);
+        } else {
+            gtk_label_set_text(GTK_LABEL(data->speed_label), "Starting...");
         }
     } else {
         gtk_label_set_text(GTK_LABEL(data->speed_label), "");
@@ -208,6 +225,7 @@ static gboolean update_progress(gpointer user_data) {
     if (item->status == DOWNLOAD_STATUS_COMPLETED ||
         item->status == DOWNLOAD_STATUS_FAILED ||
         item->status == DOWNLOAD_STATUS_CANCELLED) {
+        data->update_timer = 0;
         return FALSE;
     }
 

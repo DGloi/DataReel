@@ -10,8 +10,8 @@
 #include <signal.h>
 
 // Application constants
-#define APP_ID "com.vda.ytdlp"
-#define APP_NAME "VDA - yt-dlp Manager"
+#define APP_ID "com.datareel.ytdlp"
+#define APP_NAME "DataReel - yt-dlp Manager"
 #define APP_VERSION "1.0.0"
 
 // Download quality options
@@ -62,6 +62,22 @@ typedef struct {
     char *output_template;
 } DownloadOptions;
 
+// Format information from yt-dlp
+typedef struct {
+    char *format_id;
+    char *format_note;      // e.g., "1080p", "720p60"
+    char *ext;              // e.g., "mp4", "webm"
+    int width;
+    int height;
+    int fps;
+    int64_t filesize;
+    char *vcodec;           // e.g., "avc1", "vp9"
+    char *acodec;           // e.g., "mp4a", "opus"
+    int tbr;                // Total bitrate
+    gboolean has_video;
+    gboolean has_audio;
+} FormatInfo;
+
 // Video metadata
 typedef struct {
     char *title;
@@ -72,6 +88,8 @@ typedef struct {
     GdkPixbuf *thumbnail_pixbuf;
     int64_t filesize;
     char *format_note;
+    GList *formats;         // List of FormatInfo*
+    char **available_qualities; // NULL-terminated array of quality strings
 } VideoMetadata;
 
 // Download item
