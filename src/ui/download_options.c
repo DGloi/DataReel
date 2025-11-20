@@ -2,7 +2,6 @@
 
 typedef struct {
     GtkWidget *quality_combo;
-    GtkWidget *format_combo;
     GtkWidget *audio_only_check;
     GtkWidget *subtitles_check;
     GtkWidget *thumbnail_check;
@@ -41,22 +40,6 @@ GtkWidget* download_options_panel_new(void) {
     gtk_widget_set_sensitive(widgets->quality_combo, FALSE);
     gtk_widget_set_hexpand(widgets->quality_combo, TRUE);
     gtk_grid_attach(GTK_GRID(grid), widgets->quality_combo, 1, row++, 1, 1);
-
-    // Format selector
-    label = gtk_label_new("Format:");
-    gtk_widget_set_halign(label, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 1);
-
-    widgets->format_combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->format_combo), "MP4");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->format_combo), "WebM");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->format_combo), "MKV");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->format_combo), "MP3");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->format_combo), "M4A");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->format_combo), "Opus");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->format_combo), 0);
-    gtk_widget_set_hexpand(widgets->format_combo, TRUE);
-    gtk_grid_attach(GTK_GRID(grid), widgets->format_combo, 1, row++, 1, 1);
 
     // Custom format (hidden by default)
     label = gtk_label_new("Custom Format:");
@@ -118,7 +101,7 @@ void download_options_update_from_metadata(GtkWidget *panel, VideoMetadata *meta
     // Clear existing items
     gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(widgets->quality_combo));
 
-    if (meta->available_qualities) {
+    if (meta->available_qualities && meta->available_qualities[0] != NULL) {
         // Add qualities from metadata
         for (int i = 0; meta->available_qualities[i] != NULL; i++) {
             gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo),
@@ -132,7 +115,7 @@ void download_options_update_from_metadata(GtkWidget *panel, VideoMetadata *meta
         g_print("Updated quality options from metadata (%d options)\n",
                 g_strv_length(meta->available_qualities));
     } else {
-        // No qualities available - show error message
+        // No qualities available - show message
         gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->quality_combo),
                                        "No formats available");
         gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->quality_combo), 0);
@@ -158,14 +141,6 @@ DownloadOptions* download_options_get(GtkWidget *panel) {
 
     DownloadOptions *opts = g_malloc0(sizeof(DownloadOptions));
 
-    // Quality
-    int quality_idx = gtk_combo_box_get_active(GTK_COMBO_BOX(widgets->quality_combo));
-    opts->quality = (VideoQuality)quality_idx;
-
-    // Format
-    int format_idx = gtk_combo_box_get_active(GTK_COMBO_BOX(widgets->format_combo));
-    opts->format = (DownloadFormat)format_idx;
-
     // Options
     opts->audio_only = gtk_check_button_get_active(GTK_CHECK_BUTTON(widgets->audio_only_check));
     opts->subtitles = gtk_check_button_get_active(GTK_CHECK_BUTTON(widgets->subtitles_check));
@@ -182,12 +157,10 @@ DownloadOptions* download_options_get(GtkWidget *panel) {
         opts->time_range_end = g_strdup(end);
     }
 
-    // Custom format
-    if (opts->quality == QUALITY_CUSTOM) {
-        const char *custom = gtk_editable_get_text(GTK_EDITABLE(widgets->custom_format_entry));
-        if (custom && strlen(custom) > 0) {
-            opts->custom_format = g_strdup(custom);
-        }
+    // Custom format (from the entry field)
+    const char *custom = gtk_editable_get_text(GTK_EDITABLE(widgets->custom_format_entry));
+    if (custom && strlen(custom) > 0) {
+        opts->custom_format = g_strdup(custom);
     }
 
     return opts;

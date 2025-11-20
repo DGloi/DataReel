@@ -14,27 +14,6 @@
 #define APP_NAME "DataReel - yt-dlp Manager"
 #define APP_VERSION "1.0.0"
 
-// Download quality options
-typedef enum {
-    QUALITY_BEST,
-    QUALITY_1080P,
-    QUALITY_720P,
-    QUALITY_480P,
-    QUALITY_360P,
-    QUALITY_AUDIO_ONLY,
-    QUALITY_CUSTOM
-} VideoQuality;
-
-// Download format
-typedef enum {
-    FORMAT_MP4,
-    FORMAT_WEBM,
-    FORMAT_MKV,
-    FORMAT_MP3,
-    FORMAT_M4A,
-    FORMAT_OPUS
-} DownloadFormat;
-
 // Download status
 typedef enum {
     DOWNLOAD_STATUS_IDLE,
@@ -49,8 +28,6 @@ typedef enum {
 
 // Download options structure
 typedef struct {
-    VideoQuality quality;
-    DownloadFormat format;
     gboolean audio_only;
     gboolean subtitles;
     gboolean embed_thumbnail;
@@ -62,22 +39,6 @@ typedef struct {
     char *output_template;
 } DownloadOptions;
 
-// Format information from yt-dlp
-typedef struct {
-    char *format_id;
-    char *format_note;      // e.g., "1080p", "720p60"
-    char *ext;              // e.g., "mp4", "webm"
-    int width;
-    int height;
-    int fps;
-    int64_t filesize;
-    char *vcodec;           // e.g., "avc1", "vp9"
-    char *acodec;           // e.g., "mp4a", "opus"
-    int tbr;                // Total bitrate
-    gboolean has_video;
-    gboolean has_audio;
-} FormatInfo;
-
 // Video metadata
 typedef struct {
     char *title;
@@ -86,10 +47,9 @@ typedef struct {
     char *thumbnail_url;
     char *description;
     GdkPixbuf *thumbnail_pixbuf;
-    int64_t filesize;
+    gint64 filesize;
     char *format_note;
-    GList *formats;         // List of FormatInfo*
-    char **available_qualities; // NULL-terminated array of quality strings
+    char **available_qualities; // NULL-terminated array of quality strings for UI
 } VideoMetadata;
 
 // Download item
@@ -107,6 +67,7 @@ typedef struct {
     int read_fd;           // For reading stdout/stderr
     GIOChannel *io_channel;
     guint io_watch_id;
+    gpointer user_data;    // For UI widget reference
 } DownloadItem;
 
 // yt-dlp version info

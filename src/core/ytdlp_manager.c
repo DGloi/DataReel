@@ -56,75 +56,9 @@ char** ytdlp_build_args(const char *url, const char *output_path,
 
     g_ptr_array_add(args, g_strdup("yt-dlp"));
 
-    // Quality and format
+    // Audio only
     if (opts->audio_only) {
         g_ptr_array_add(args, g_strdup("-x"));
-
-        switch (opts->format) {
-            case FORMAT_MP3:
-                g_ptr_array_add(args, g_strdup("--audio-format"));
-                g_ptr_array_add(args, g_strdup("mp3"));
-                break;
-            case FORMAT_M4A:
-                g_ptr_array_add(args, g_strdup("--audio-format"));
-                g_ptr_array_add(args, g_strdup("m4a"));
-                break;
-            case FORMAT_OPUS:
-                g_ptr_array_add(args, g_strdup("--audio-format"));
-                g_ptr_array_add(args, g_strdup("opus"));
-                break;
-            default:
-                break;
-        }
-    } else {
-        // Video quality
-        switch (opts->quality) {
-            case QUALITY_BEST:
-                g_ptr_array_add(args, g_strdup("-f"));
-                g_ptr_array_add(args, g_strdup("bestvideo+bestaudio/best"));
-                break;
-            case QUALITY_1080P:
-                g_ptr_array_add(args, g_strdup("-f"));
-                g_ptr_array_add(args, g_strdup("bestvideo[height<=1080]+bestaudio/best"));
-                break;
-            case QUALITY_720P:
-                g_ptr_array_add(args, g_strdup("-f"));
-                g_ptr_array_add(args, g_strdup("bestvideo[height<=720]+bestaudio/best"));
-                break;
-            case QUALITY_480P:
-                g_ptr_array_add(args, g_strdup("-f"));
-                g_ptr_array_add(args, g_strdup("bestvideo[height<=480]+bestaudio/best"));
-                break;
-            case QUALITY_360P:
-                g_ptr_array_add(args, g_strdup("-f"));
-                g_ptr_array_add(args, g_strdup("bestvideo[height<=360]+bestaudio/best"));
-                break;
-            case QUALITY_CUSTOM:
-                if (opts->custom_format) {
-                    g_ptr_array_add(args, g_strdup("-f"));
-                    g_ptr_array_add(args, g_strdup(opts->custom_format));
-                }
-                break;
-            default:
-                break;
-        }
-
-        // Merge format
-        g_ptr_array_add(args, g_strdup("--merge-output-format"));
-        switch (opts->format) {
-            case FORMAT_MP4:
-                g_ptr_array_add(args, g_strdup("mp4"));
-                break;
-            case FORMAT_WEBM:
-                g_ptr_array_add(args, g_strdup("webm"));
-                break;
-            case FORMAT_MKV:
-                g_ptr_array_add(args, g_strdup("mkv"));
-                break;
-            default:
-                g_ptr_array_add(args, g_strdup("mp4"));
-                break;
-        }
     }
 
     // Subtitles

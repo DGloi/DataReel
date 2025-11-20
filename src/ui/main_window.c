@@ -6,25 +6,17 @@
 #include "../core/metadata_fetcher.h"
 #include "../utils/string_utils.h"
 
-typedef struct {
-    GtkWidget *url_entry;
-    GtkWidget *path_entry;
-    GtkWidget *options_panel;
-    GtkWidget *download_list;
-    GtkWidget *start_button;
-    GtkWidget *preview_box;
-    GtkWidget *preview_thumbnail;
-    GtkWidget *preview_title;
-    GtkWidget *preview_info;
-    GList *active_downloads;
-} MainWindowData;
 
 static void on_folder_selected(GObject *source, GAsyncResult *result, gpointer user_data);
 static void on_browse_clicked(GtkButton *button, gpointer user_data);
 static void on_download_clicked(GtkButton *button, gpointer user_data);
 static void on_settings_clicked(GtkButton *button, gpointer user_data);
 static void on_url_changed(GtkEditable *editable, gpointer user_data);
-static void on_metadata_fetched(VideoMetadata *meta, gpointer user_data);
+static void on_metadata_fetched(GObject *source_object, GAsyncResult *result, gpointer user_data);
+static void on_pause_all_clicked(GtkButton *button, gpointer user_data);
+static void on_resume_all_clicked(GtkButton *button, gpointer user_data);
+static void on_cancel_all_clicked(GtkButton *button, gpointer user_data);
+static void on_retry_selected_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget* main_window_new(GtkApplication *app) {
     MainWindowData *data = g_malloc0(sizeof(MainWindowData));
@@ -33,6 +25,13 @@ GtkWidget* main_window_new(GtkApplication *app) {
     GtkWidget *window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), APP_NAME);
     gtk_window_set_default_size(GTK_WINDOW(window), 1000, 700);
+
+    // Set minimum size to ensure proper layout
+    gtk_widget_set_size_request(GTK_WIDGET(window), 800, 600);
+
+    // Track window size
+    data->window_width = 1000;
+    data->window_height = 700;
 
     // Create header bar
     GtkWidget *header_bar = gtk_header_bar_new();
@@ -44,18 +43,19 @@ GtkWidget* main_window_new(GtkApplication *app) {
     g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings_clicked), window);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header_bar), settings_button);
 
-    // Main container
-    GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    gtk_window_set_child(GTK_WINDOW(window), paned);
+    // Main container - Use regular box instead of paned to prevent resizing
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_window_set_child(GTK_WINDOW(window), main_box);
 
-    // Left side: Input and options
+    // Left side: Input and options (2/3 of the window)
     GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_size_request(left_box, 400, -1);
+    gtk_widget_set_hexpand(left_box, TRUE);
+    gtk_widget_set_vexpand(left_box, TRUE);
     gtk_widget_set_margin_top(left_box, 12);
     gtk_widget_set_margin_bottom(left_box, 12);
     gtk_widget_set_margin_start(left_box, 12);
     gtk_widget_set_margin_end(left_box, 12);
-    gtk_paned_set_start_child(GTK_PANED(paned), left_box);
+    gtk_box_append(GTK_BOX(main_box), left_box);
 
     // URL input
     GtkWidget *url_frame = gtk_frame_new("Video URL");
@@ -81,17 +81,18 @@ GtkWidget* main_window_new(GtkApplication *app) {
     gtk_box_append(GTK_BOX(url_box), data->preview_box);
 
     data->preview_thumbnail = gtk_image_new();
-    gtk_widget_set_size_request(data->preview_thumbnail, -1, 150);
+    gtk_widget_set_size_request(data->preview_thumbnail, -1, 200);  // Larger thumbnail
     gtk_box_append(GTK_BOX(data->preview_box), data->preview_thumbnail);
 
     data->preview_title = gtk_label_new("");
     gtk_label_set_wrap(GTK_LABEL(data->preview_title), TRUE);
     gtk_label_set_max_width_chars(GTK_LABEL(data->preview_title), 40);
-    gtk_widget_add_css_class(data->preview_title, "title-2");
+    gtk_widget_add_css_class(data->preview_title, "title-3");  // Smaller text
     gtk_box_append(GTK_BOX(data->preview_box), data->preview_title);
 
     data->preview_info = gtk_label_new("");
     gtk_widget_add_css_class(data->preview_info, "dim-label");
+    gtk_widget_add_css_class(data->preview_info, "caption");  // Smaller text
     gtk_box_append(GTK_BOX(data->preview_box), data->preview_info);
 
     // Path input
@@ -131,13 +132,15 @@ GtkWidget* main_window_new(GtkApplication *app) {
 
     gtk_box_append(GTK_BOX(left_box), button_box);
 
-    // Right side: Downloads list
+    // Right side: Downloads list (1/3 of the window) - FIXED SIZE
     GtkWidget *right_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_widget_set_vexpand(right_box, TRUE);
     gtk_widget_set_margin_top(right_box, 12);
     gtk_widget_set_margin_bottom(right_box, 12);
     gtk_widget_set_margin_start(right_box, 12);
     gtk_widget_set_margin_end(right_box, 12);
-    gtk_paned_set_end_child(GTK_PANED(paned), right_box);
+    gtk_widget_set_size_request(right_box, 333, -1);  // Fixed width: 1/3 of 1000px = 333px
+    gtk_box_append(GTK_BOX(main_box), right_box);
 
     GtkWidget *downloads_label = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(downloads_label), "<b>Active Downloads</b>");
@@ -153,8 +156,44 @@ GtkWidget* main_window_new(GtkApplication *app) {
     data->download_list = gtk_list_box_new();
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(data->download_list), GTK_SELECTION_NONE);
     gtk_widget_add_css_class(data->download_list, "boxed-list");
+
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), data->download_list);
     gtk_box_append(GTK_BOX(right_box), scrolled);
+
+    // Control buttons at the bottom - symbolic buttons with fixed width
+    GtkWidget *controls_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_margin_top(controls_box, 6);
+    gtk_widget_set_halign(controls_box, GTK_ALIGN_CENTER);
+
+    GtkWidget *pause_button = gtk_button_new_from_icon_name("media-playback-pause");
+    gtk_widget_set_tooltip_text(pause_button, "Pause Selected");
+    gtk_widget_set_size_request(pause_button, 40, 40);
+    g_signal_connect(pause_button, "clicked", G_CALLBACK(on_pause_all_clicked), data);
+    gtk_widget_add_css_class(pause_button, "circular");
+    gtk_box_append(GTK_BOX(controls_box), pause_button);
+
+    GtkWidget *resume_button = gtk_button_new_from_icon_name("media-playback-start");
+    gtk_widget_set_tooltip_text(resume_button, "Resume Selected");
+    gtk_widget_set_size_request(resume_button, 40, 40);
+    g_signal_connect(resume_button, "clicked", G_CALLBACK(on_resume_all_clicked), data);
+    gtk_widget_add_css_class(resume_button, "circular");
+    gtk_box_append(GTK_BOX(controls_box), resume_button);
+
+    GtkWidget *cancel_button = gtk_button_new_from_icon_name("process-stop");
+    gtk_widget_set_tooltip_text(cancel_button, "Cancel Selected");
+    gtk_widget_set_size_request(cancel_button, 40, 40);
+    g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_cancel_all_clicked), data);
+    gtk_widget_add_css_class(cancel_button, "circular");
+    gtk_box_append(GTK_BOX(controls_box), cancel_button);
+
+    GtkWidget *retry_button = gtk_button_new_from_icon_name("view-refresh");
+    gtk_widget_set_tooltip_text(retry_button, "Retry Selected");
+    gtk_widget_set_size_request(retry_button, 40, 40);
+    g_signal_connect(retry_button, "clicked", G_CALLBACK(on_retry_selected_clicked), data);
+    gtk_widget_add_css_class(retry_button, "circular");
+    gtk_box_append(GTK_BOX(controls_box), retry_button);
+
+    gtk_box_append(GTK_BOX(right_box), controls_box);
 
     // Store data
     g_object_set_data_full(G_OBJECT(window), "window-data", data, g_free);
@@ -244,6 +283,65 @@ static void on_settings_clicked(GtkButton *button, gpointer user_data) {
     settings_panel_show(window);
 }
 
+static void on_pause_all_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    MainWindowData *data = (MainWindowData *)user_data;
+
+    if (!data->selected_downloads) return;
+
+    for (GList *l = data->selected_downloads; l != NULL; l = l->next) {
+        DownloadItem *item = (DownloadItem *)l->data;
+        download_item_pause(item);
+    }
+}
+
+static void on_resume_all_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    MainWindowData *data = (MainWindowData *)user_data;
+
+    if (!data->selected_downloads) return;
+
+    for (GList *l = data->selected_downloads; l != NULL; l = l->next) {
+        DownloadItem *item = (DownloadItem *)l->data;
+        download_item_resume(item);
+    }
+}
+
+static void on_cancel_all_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    MainWindowData *data = (MainWindowData *)user_data;
+
+    if (!data->selected_downloads) return;
+
+    for (GList *l = data->selected_downloads; l != NULL; l = l->next) {
+        DownloadItem *item = (DownloadItem *)l->data;
+        download_item_cancel(item);
+    }
+}
+
+static void on_retry_selected_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    MainWindowData *data = (MainWindowData *)user_data;
+
+    if (!data->selected_downloads) return;
+
+    // Retry selected items that have failed or were cancelled
+    for (GList *l = data->selected_downloads; l != NULL; l = l->next) {
+        DownloadItem *item = (DownloadItem *)l->data;
+
+        if (item->status == DOWNLOAD_STATUS_FAILED || item->status == DOWNLOAD_STATUS_CANCELLED) {
+            // Reset item status and start again
+            item->status = DOWNLOAD_STATUS_IDLE;
+            item->progress = 0.0;
+            g_free(item->error_message);
+            item->error_message = NULL;
+
+            // Restart the download
+            download_item_start(item);
+        }
+    }
+}
+
 static guint url_timeout_id = 0;
 
 static gboolean fetch_metadata_timeout(gpointer user_data) {
@@ -254,7 +352,8 @@ static gboolean fetch_metadata_timeout(gpointer user_data) {
         gtk_widget_set_visible(data->preview_box, TRUE);
         gtk_label_set_text(GTK_LABEL(data->preview_title), "Fetching video info...");
 
-        metadata_fetch_async(url, on_metadata_fetched, data);
+        // Use the correct function signature
+        metadata_fetch_async(url, NULL, on_metadata_fetched, data);
     }
 
     url_timeout_id = 0;
@@ -278,8 +377,22 @@ static void on_url_changed(GtkEditable *editable, gpointer user_data) {
     url_timeout_id = g_timeout_add(1000, fetch_metadata_timeout, user_data);
 }
 
-static void on_metadata_fetched(VideoMetadata *meta, gpointer user_data) {
+static void on_metadata_fetched(GObject *source_object, GAsyncResult *result, gpointer user_data) {
     MainWindowData *data = (MainWindowData *)user_data;
+
+    GError *error = NULL;
+    VideoMetadata *meta = metadata_fetch_finish(result, &error);
+
+    if (error) {
+        g_warning("Error fetching meta %s", error->message);
+        g_error_free(error);
+
+        if (GTK_IS_WIDGET(data->preview_box)) {
+            gtk_widget_set_visible(data->preview_box, FALSE);
+        }
+        if (meta) metadata_free(meta);
+        return;
+    }
 
     if (!meta || !meta->title) {
         if (GTK_IS_WIDGET(data->preview_box)) {
@@ -311,6 +424,12 @@ static void on_metadata_fetched(VideoMetadata *meta, gpointer user_data) {
         int new_width = 350;
         int new_height = (height * new_width) / width;
 
+        // Larger thumbnail for preview
+        if (new_width > 350) {
+            new_width = 350;
+            new_height = (height * new_width) / width;
+        }
+
         GdkPixbuf *scaled = gdk_pixbuf_scale_simple(meta->thumbnail_pixbuf,
                                                     new_width, new_height,
                                                     GDK_INTERP_BILINEAR);
@@ -337,12 +456,6 @@ static void on_metadata_fetched(VideoMetadata *meta, gpointer user_data) {
         char *size = string_format_size(meta->filesize);
         g_string_append(info, size);
         g_free(size);
-    }
-
-    // Show number of available formats
-    if (meta->formats) {
-        if (info->len > 0) g_string_append(info, " • ");
-        g_string_append_printf(info, "%d formats available", g_list_length(meta->formats));
     }
 
     gtk_label_set_text(GTK_LABEL(data->preview_info), info->str);

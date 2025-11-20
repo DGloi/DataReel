@@ -14,6 +14,7 @@ DownloadItem* download_item_new(const char *url, const char *output_path,
     item->progress = 0.0;
     item->process_id = -1;
     item->read_fd = -1;
+    item->speed = 0;
 
     return item;
 }
@@ -55,27 +56,69 @@ static gboolean on_stdout_readable(GIOChannel *channel, GIOCondition cond,
                                    gpointer user_data) {
     DownloadItem *item = (DownloadItem *)user_data;
 
-    if (cond & G_IO_HUP) {
-        item->status = DOWNLOAD_STATUS_COMPLETED;
-        return FALSE;
+    if (cond & (G_IO_HUP | G_IO_ERR | G_IO_NVAL)) {
+        // Check if process finished successfully
+        int status;
+        pid_t result = waitpid(item->process_id, &status, WNOHANG);
+
+        if (result == item->process_id) {
+            if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+                item->status = DOWNLOAD_STATUS_COMPLETED;
+                item->progress = 100.0;
+            } else {
+                item->status = DOWNLOAD_STATUS_FAILED;
+                item->error_message = g_strdup("Download process failed");
+            }
+        }
+        return FALSE; // Remove the watch
     }
 
-    char *line = NULL;
-    gsize length;
-    GError *error = NULL;
+    if (cond & G_IO_IN) {
+        // Use a different approach for reading from the pipe
+        char buffer[4096];
+        gsize bytes_read;
+        GError *error = NULL;
 
-    GIOStatus status = g_io_channel_read_line(channel, &line, &length, NULL, &error);
+        GIOStatus status = g_io_channel_read_chars(channel, buffer, sizeof(buffer) - 1, &bytes_read, &error);
 
-    if (status == G_IO_STATUS_NORMAL && line) {
-        parse_progress_line(line, item);
-        g_free(line);
-        return TRUE;
-    } else if (status == G_IO_STATUS_EOF) {
-        item->status = DOWNLOAD_STATUS_COMPLETED;
-        return FALSE;
+        if (status == G_IO_STATUS_NORMAL && bytes_read > 0) {
+            buffer[bytes_read] = '\0';
+
+            // Split the buffer into lines and process each
+            char *line_start = buffer;
+            char *newline;
+
+            while ((newline = strchr(line_start, '\n')) != NULL) {
+                *newline = '\0';
+
+                // Process the line
+                if (parse_progress_line(line_start, item)) {
+                    // Progress was parsed successfully
+                }
+
+                line_start = newline + 1;
+            }
+
+            // Process any remaining partial line (if the buffer didn't end with \n)
+            if (*line_start != '\0') {
+                if (parse_progress_line(line_start, item)) {
+                    // Progress was parsed successfully
+                }
+            }
+        } else if (status == G_IO_STATUS_EOF) {
+            item->status = DOWNLOAD_STATUS_COMPLETED;
+            item->progress = 100.0;
+            return FALSE; // Remove the watch
+        }
+
+        if (error) {
+            g_warning("IO error: %s", error->message);
+            g_error_free(error);
+            return FALSE; // Remove the watch
+        }
     }
 
-    return TRUE;
+    return TRUE; // Keep the watch
 }
 
 gboolean download_item_start(DownloadItem *item) {
@@ -119,11 +162,13 @@ gboolean download_item_start(DownloadItem *item) {
 
         // Create GIOChannel for async reading
         item->io_channel = g_io_channel_unix_new(item->read_fd);
+
+        // Set the encoding to NULL (raw binary) - this is important for pipes
         g_io_channel_set_encoding(item->io_channel, NULL, NULL);
         g_io_channel_set_buffered(item->io_channel, FALSE);
 
         item->io_watch_id = g_io_add_watch(item->io_channel,
-                                          G_IO_IN | G_IO_HUP | G_IO_ERR,
+                                          G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
                                           on_stdout_readable,
                                           item);
 
@@ -143,6 +188,32 @@ gboolean download_item_cancel(DownloadItem *item) {
 
     if (kill(item->process_id, SIGTERM) == 0) {
         item->status = DOWNLOAD_STATUS_CANCELLED;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+gboolean download_item_pause(DownloadItem *item) {
+    if (!item || item->process_id <= 0 || item->status != DOWNLOAD_STATUS_DOWNLOADING) {
+        return FALSE;
+    }
+
+    if (kill(item->process_id, SIGSTOP) == 0) {
+        item->status = DOWNLOAD_STATUS_QUEUED; // Use QUEUED to represent paused
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+gboolean download_item_resume(DownloadItem *item) {
+    if (!item || item->process_id <= 0 || item->status != DOWNLOAD_STATUS_QUEUED) {
+        return FALSE;
+    }
+
+    if (kill(item->process_id, SIGCONT) == 0) {
+        item->status = DOWNLOAD_STATUS_DOWNLOADING;
         return TRUE;
     }
 
